@@ -6,7 +6,7 @@
 // (see the LICENSE file for details).
 //
 
-use cgmath::{Deg, Point3, Rad};
+use cgmath::{Basis3, Deg, EuclideanSpace, Point3, Rad, Rotation, Rotation3, Vector3};
 use crate::gui::CameraView;
 use glium::program;
 use std::{cell::RefCell, rc::Rc};
@@ -23,18 +23,27 @@ pub struct Vertex3 {
 }
 glium::implement_vertex!(Vertex3, position);
 
+#[derive(Copy, Clone)]
+pub struct MeshVertex {
+    pub position: [f32; 3],
+    pub normal: [f32; 3]
+}
+glium::implement_vertex!(MeshVertex, position, normal);
+
 #[derive(Clone)]
-pub struct MeshBuffers {
-    pub vertices: Rc<glium::VertexBuffer<Vertex3>>,
+pub struct MeshBuffers<T: Copy> {
+    pub vertices: Rc<glium::VertexBuffer<T>>,
     pub indices: Rc<glium::IndexBuffer<u32>>,
 }
 
 pub struct OpenGlObjects {
-    pub sky_mesh: MeshBuffers,
+    pub sky_mesh: MeshBuffers<Vertex3>,
     pub sky_mesh_prog: Rc<glium::Program>,
     pub texture_copy_single: Rc<glium::Program>,
     pub texture_copy_multi: Rc<glium::Program>,
     pub unit_quad: Rc<glium::VertexBuffer<Vertex2>>,
+    pub target_mesh: MeshBuffers<MeshVertex>,
+    pub target_prog: Rc<glium::Program>
 }
 
 pub struct ProgramData {
@@ -73,12 +82,21 @@ impl ProgramData {
         ];
         let unit_quad = Rc::new(glium::VertexBuffer::new(display, &unit_quad_data).unwrap());
 
+        let target_prog = Rc::new(program!(display,
+            330 => {
+                vertex: include_str!("resources/shaders/3d_view.vert"),
+                fragment: include_str!("resources/shaders/surface.frag"),
+            }
+        ).unwrap());
+
         let gl_objects = OpenGlObjects{
             sky_mesh: create_sky_mesh(Deg(10.0), 10, display),
             sky_mesh_prog,
             texture_copy_single,
             texture_copy_multi,
-            unit_quad
+            unit_quad,
+            target_mesh: create_target_mesh(display),
+            target_prog
         };
 
         ProgramData{
@@ -88,11 +106,80 @@ impl ProgramData {
     }
 }
 
+fn create_target_mesh(
+    display: &glium::Display
+) -> MeshBuffers<MeshVertex> {
+    // dimensions based on B737 MAX
+    const LENGTH: f32 = 35.56;
+    const FUSELAGE_D: f32 = 3.76;
+    const NUM_FUSELAGE_SEGS: usize = 20;
+    const WING_WIDTH: f32 = 3.5;
+    const WINGSPAN: f32 = 31.0;
+    const WING_ANGLE: Deg<f32> = Deg(30.0);
+
+    let mut vertex_data: Vec<MeshVertex> = vec![];
+    let mut index_data: Vec<u32> = vec![];
+
+    let l_half = Vector3::new(LENGTH / 2.0, 0.0, 0.0);
+
+    // create fuselage
+    for i in 0..NUM_FUSELAGE_SEGS {
+        let p = FUSELAGE_D / 2.0 * Point3::from_vec(Basis3::from_angle_x(Deg(i as f32 * 360.0 / NUM_FUSELAGE_SEGS as f32))
+            .rotate_vector(Vector3::unit_y()));
+
+        vertex_data.push(MeshVertex{
+            position: *(p + l_half).as_ref(),
+            normal: *p.to_vec().as_ref()
+        });
+
+        vertex_data.push(MeshVertex{
+            position: *(p - l_half).as_ref(),
+            normal: *p.to_vec().as_ref()
+        });
+
+        index_data.push( (2 * i)                                as u32);
+        index_data.push(((2 * i + 2) % (2 * NUM_FUSELAGE_SEGS)) as u32);
+        index_data.push( (2 * i + 1)                            as u32);
+
+        index_data.push(( 2 * i + 1)                            as u32);
+        index_data.push(((2 * i + 2) % (2 * NUM_FUSELAGE_SEGS)) as u32);
+        index_data.push(((2 * i + 3) % (2 * NUM_FUSELAGE_SEGS)) as u32);
+    }
+
+    // create wings
+    let back = WINGSPAN / (2.0 * Rad::from(WING_ANGLE).0.tan());
+    let p0 = Point3{ x:  WING_WIDTH / 2.0,        y: 0.0,             z: 0.0 };
+    let p1 = Point3{ x: -WING_WIDTH / 2.0,        y: 0.0,             z: 0.0 };
+    let p2 = Point3{ x: -WING_WIDTH / 2.0 - back, y: -WINGSPAN / 2.0, z: 0.0 };
+    let p3 = Point3{ x:  WING_WIDTH / 2.0 - back, y: -WINGSPAN / 2.0, z: 0.0 };
+    let p4 = Point3{ x: -WING_WIDTH / 2.0 - back, y:  WINGSPAN / 2.0, z: 0.0 };
+    let p5 = Point3{ x:  WING_WIDTH / 2.0 - back, y:  WINGSPAN / 2.0, z: 0.0 };
+
+    let base_idx = vertex_data.len();
+
+    for p in [p0, p1, p2, p3, p4, p5] {
+        vertex_data.push(MeshVertex{
+            position: *p.as_ref(),
+            normal: [0.0, 0.0, 1.0]
+        });
+    }
+
+    for i in [0, 1, 3] { index_data.push((base_idx + i) as u32); }
+    for i in [1, 2, 3] { index_data.push((base_idx + i) as u32); }
+    for i in [0, 5, 1] { index_data.push((base_idx + i) as u32); }
+    for i in [1, 5, 4] { index_data.push((base_idx + i) as u32); }
+
+    let vertices = Rc::new(glium::VertexBuffer::new(display, &vertex_data).unwrap());
+    let indices = Rc::new(glium::IndexBuffer::new(display, glium::index::PrimitiveType::TrianglesList, &index_data).unwrap());
+
+    MeshBuffers{ vertices, indices }
+}
+
 fn create_sky_mesh(
     step: cgmath::Deg<f32>,
     num_substeps: usize,
     display: &glium::Display
-) -> MeshBuffers {
+) -> MeshBuffers<Vertex3> {
     let mut vertex_data: Vec<Vertex3> = vec![];
     let mut index_data: Vec<u32> = vec![];
 
