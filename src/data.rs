@@ -113,7 +113,8 @@ fn create_target_mesh(
     const LENGTH: f32 = 35.56;
     const FUSELAGE_D: f32 = 3.76;
     const NUM_FUSELAGE_SEGS: usize = 20;
-    const WING_WIDTH: f32 = 3.5;
+    const WING_WIDTH_BASE: f32 = 6.0;
+    const WING_WIDTH_END: f32 = 1.7;
     const WINGSPAN: f32 = 31.0;
     const WING_ANGLE: Deg<f32> = Deg(30.0);
 
@@ -148,12 +149,12 @@ fn create_target_mesh(
 
     // create wings
     let back = WINGSPAN / (2.0 * Rad::from(WING_ANGLE).0.tan());
-    let p0 = Point3{ x:  WING_WIDTH / 2.0,        y: 0.0,             z: 0.0 };
-    let p1 = Point3{ x: -WING_WIDTH / 2.0,        y: 0.0,             z: 0.0 };
-    let p2 = Point3{ x: -WING_WIDTH / 2.0 - back, y: -WINGSPAN / 2.0, z: 0.0 };
-    let p3 = Point3{ x:  WING_WIDTH / 2.0 - back, y: -WINGSPAN / 2.0, z: 0.0 };
-    let p4 = Point3{ x: -WING_WIDTH / 2.0 - back, y:  WINGSPAN / 2.0, z: 0.0 };
-    let p5 = Point3{ x:  WING_WIDTH / 2.0 - back, y:  WINGSPAN / 2.0, z: 0.0 };
+    let p0 = Point3{ x:  WING_WIDTH_BASE / 2.0,        y: 0.0,             z: 0.0 };
+    let p1 = Point3{ x: -WING_WIDTH_BASE / 2.0,        y: 0.0,             z: 0.0 };
+    let p2 = Point3{ x:  -WING_WIDTH_END / 2.0 - back, y: -WINGSPAN / 2.0, z: 0.0 };
+    let p3 = Point3{ x:   WING_WIDTH_END / 2.0 - back, y: -WINGSPAN / 2.0, z: 0.0 };
+    let p4 = Point3{ x:  -WING_WIDTH_END / 2.0 - back, y:  WINGSPAN / 2.0, z: 0.0 };
+    let p5 = Point3{ x:   WING_WIDTH_END / 2.0 - back, y:  WINGSPAN / 2.0, z: 0.0 };
 
     let base_idx = vertex_data.len();
 

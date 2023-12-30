@@ -33,7 +33,7 @@ impl CameraView {
         display: &glium::Display
     ) -> CameraView {
         let field_of_view_y = Deg(2.0);
-        let target_pos = Point3{ x: 1000.0, y: 0.0, z: 1000.0 };
+        let target_pos = Point3{ x: 2000.0, y: 0.0, z: 500.0 };
         let dir = target_pos.to_vec();
         let up = Vector3{ x: 0.0, y: 0.0, z: 1.0 };
 
