@@ -43,7 +43,6 @@ pub struct AdjustedImageSize {
 pub fn handle_gui(
     program_data: &mut data::ProgramData,
     ui: &imgui::Ui,
-    gui_state: &mut GuiState,
     renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>,
     display: &glium::Display
 ) -> Option<runner::FontSizeRequest> {
@@ -53,7 +52,7 @@ pub fn handle_gui(
         std::ptr::null()
     ); }
 
-    handle_camera_view(&mut program_data.camera_view, ui, gui_state);
+    handle_camera_view(&mut program_data.camera_view, ui, &mut program_data.gui_state);
 
     None
 }

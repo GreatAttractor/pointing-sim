@@ -48,11 +48,16 @@ pub struct OpenGlObjects {
 
 pub struct ProgramData {
     pub camera_view: CameraView,
-    gl_objects: OpenGlObjects
+    gl_objects: OpenGlObjects,
+    pub gui_state: crate::gui::GuiState
 }
 
 impl ProgramData {
-    pub fn new(renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>, display: &glium::Display) -> ProgramData {
+    pub fn new(
+        renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>,
+        display: &glium::Display,
+        gui_state: crate::gui::GuiState
+    ) -> ProgramData {
         let sky_mesh_prog = Rc::new(program!(display,
             330 => {
                 vertex: include_str!("resources/shaders/3d_view.vert"),
@@ -101,7 +106,8 @@ impl ProgramData {
 
         ProgramData{
             camera_view: CameraView::new(&gl_objects, renderer, display),
-            gl_objects
+            gl_objects,
+            gui_state
         }
     }
 }

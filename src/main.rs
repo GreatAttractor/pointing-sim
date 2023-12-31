@@ -15,12 +15,12 @@ fn main() {
     const DEFAULT_FONT_SIZE: f32 = 15.0;
     let runner = runner::create_runner(DEFAULT_FONT_SIZE);
     let mut data = None;
-    let mut gui_state = gui::GuiState::new(runner.platform().hidpi_factor(), DEFAULT_FONT_SIZE);
+    let mut gui_state = Some(gui::GuiState::new(runner.platform().hidpi_factor(), DEFAULT_FONT_SIZE));
 
     runner.main_loop(move |_, ui, display, renderer| {
         if data.is_none() {
-            data = Some(data::ProgramData::new(renderer, display));
+            data = Some(data::ProgramData::new(renderer, display, gui_state.take().unwrap()));
         }
-        gui::handle_gui(data.as_mut().unwrap(), ui, &mut gui_state, renderer, display)
+        gui::handle_gui(data.as_mut().unwrap(), ui, renderer, display)
     });
 }
