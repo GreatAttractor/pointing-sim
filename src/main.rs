@@ -10,8 +10,24 @@ mod data;
 mod gui;
 mod runner;
 mod subscriber;
+mod workers;
 
 fn main() {
+    let tz_offset = chrono::Local::now().offset().clone();
+    simplelog::SimpleLogger::init(
+        simplelog::LevelFilter::Debug,
+        simplelog::ConfigBuilder::new()
+            .set_target_level(simplelog::LevelFilter::Error)
+            .set_time_offset(time::UtcOffset::from_whole_seconds(tz_offset.local_minus_utc()).unwrap())
+            .set_time_format_custom(simplelog::format_description!(
+                "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:6]"
+            ))
+            .build(),
+    ).unwrap();
+
+    std::thread::spawn(|| { workers::target_source() });
+    std::thread::spawn(|| { workers::target_receiver() });
+
     const DEFAULT_FONT_SIZE: f32 = 15.0;
     let runner = runner::create_runner(DEFAULT_FONT_SIZE);
     let mut data = None;
