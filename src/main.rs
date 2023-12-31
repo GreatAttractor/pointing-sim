@@ -9,6 +9,7 @@
 mod data;
 mod gui;
 mod runner;
+mod subscriber;
 
 fn main() {
     const DEFAULT_FONT_SIZE: f32 = 15.0;
