@@ -6,6 +6,8 @@
 // (see the LICENSE file for details).
 //
 
+use cgmath::{Deg, Vector3, Zero};
+use crate::{data, data::{GeoPos, LatLon, TargetInfoMessage}};
 use std::io::Write;
 use std::net::TcpListener;
 
@@ -18,10 +20,18 @@ pub fn target_source() {
     let listener = TcpListener::bind(format!("127.0.0.1:{}", TARGET_SOURCE_PORT)).unwrap();
     let mut stream = listener.incoming().next().unwrap().unwrap();
     log::info!("client connected");
-    let mut counter = 0;
+
+    let observer_pos = GeoPos{ lat_lon: LatLon::new(Deg(0.0), Deg(0.0)), elevation: 0.0 };
+    let mut target_pos = GeoPos{ lat_lon: LatLon::new(Deg(0.05), Deg(0.1)), elevation: 5000.0 };
+    let track = Deg(-90.0);
+    let target_airspeed = 200.0;
+
     loop {
-        stream.write_all(format!("message {}\n", counter).as_bytes()).unwrap();
-        counter += 1;
+        stream.write_all(TargetInfoMessage{
+            position: data::to_local(&observer_pos, &target_pos),
+            velocity: Vector3::zero(),
+            track
+        }.to_string().as_bytes()).unwrap();
 
         std::thread::sleep(MSG_DELTA_T);
     }

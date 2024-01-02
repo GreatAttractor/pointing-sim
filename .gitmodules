@@ -1,0 +1,3 @@
+[submodule "ext/subscriber-rs"]
+	path = ext/subscriber-rs
+	url = https://github.com/GreatAttractor/subscriber-rs.git

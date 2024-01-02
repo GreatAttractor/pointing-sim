@@ -9,8 +9,9 @@
 mod data;
 mod gui;
 mod runner;
-mod subscriber;
 mod workers;
+
+use crossbeam::channel::TryRecvError;
 
 fn main() {
     let tz_offset = chrono::Local::now().offset().clone();
@@ -25,9 +26,6 @@ fn main() {
             .build(),
     ).unwrap();
 
-    std::thread::spawn(|| { workers::target_source() });
-    std::thread::spawn(|| { workers::target_receiver() });
-
     const DEFAULT_FONT_SIZE: f32 = 15.0;
     let runner = runner::create_runner(DEFAULT_FONT_SIZE);
     let mut data = None;
@@ -35,8 +33,22 @@ fn main() {
 
     runner.main_loop(move |_, ui, display, renderer| {
         if data.is_none() {
-            data = Some(data::ProgramData::new(renderer, display, gui_state.take().unwrap()));
+            let (sender_worker, receiver_main) = crossbeam::channel::unbounded();
+
+            std::thread::spawn(|| { workers::target_source() });
+            std::thread::spawn(move || { workers::target_receiver(sender_worker) });
+
+            data = Some(data::ProgramData::new(renderer, display, gui_state.take().unwrap(), receiver_main));
         }
+
+        match data.as_ref().unwrap().target_receiver.try_recv() {
+            Ok(msg) => data.as_mut().unwrap().target_subscribers.notify(&msg),
+            Err(e) => match e {
+                TryRecvError::Empty => (),
+                _ => panic!("unexpected error: {}", e)
+            }
+        }
+
         gui::handle_gui(data.as_mut().unwrap(), ui, renderer, display)
     });
 }

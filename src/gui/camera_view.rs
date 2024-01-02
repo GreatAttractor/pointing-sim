@@ -7,9 +7,10 @@
 //
 
 use cgmath::{Basis3, Deg, EuclideanSpace, InnerSpace, Matrix3, Matrix4, Point3, Rotation3, SquareMatrix, Vector3};
-use crate::{data, data::{MeshVertex, Vertex3}, gui::draw_buffer::{DrawBuffer, Sampling}};
+use crate::{data, data::{MeshVertex, TargetInfoMessage, Vertex3}, gui::draw_buffer::{DrawBuffer, Sampling}};
 use glium::{Surface, uniform};
 use std::{cell::RefCell, rc::Rc};
+use subscriber_rs::Subscriber;
 
 pub struct CameraView {
     dir: Vector3<f32>,
@@ -126,4 +127,16 @@ impl CameraView {
     }
 
     pub fn draw_buf_id(&self) -> imgui::TextureId { self.draw_buf.id() }
+}
+
+impl Subscriber<TargetInfoMessage> for CameraView {
+    fn notify(&mut self, value: &TargetInfoMessage) {
+        // we need to use track (actual azimuth of travel), as we
+        // do not get heading (aircraft orientation) from ADS-B messages
+        self.target_heading = Deg(value.track.0 as f32);
+        self.target_pos = value.position.cast::<f32>().unwrap();
+        self.dir = self.target_pos.to_vec();
+        self.gl_view = Matrix4::look_to_rh(Point3::origin(), self.dir, self.up);
+        self.render();
+    }
 }

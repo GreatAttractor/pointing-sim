@@ -6,10 +6,60 @@
 // (see the LICENSE file for details).
 //
 
-use cgmath::{Basis3, Deg, EuclideanSpace, Point3, Rad, Rotation, Rotation3, Vector3};
+use cgmath::{Basis3, Deg, EuclideanSpace, InnerSpace, Point3, Rad, Rotation, Rotation3, Vector3};
 use crate::gui::CameraView;
 use glium::program;
-use std::{cell::RefCell, rc::Rc};
+use scan_fmt::scan_fmt;
+use std::{cell::RefCell, error::Error, rc::{Rc, Weak}};
+
+/// Arithmetic mean radius (R1) as per IUGG.
+pub const EARTH_RADIUS: f64 = 6_371_008.8;
+
+/// Target information using observer's frame of reference (X points north, Z points up, Y points west).
+#[derive(Debug)]
+pub struct TargetInfoMessage {
+    pub position: Point3<f64>,
+    pub velocity: Vector3<f64>,
+    pub track: Deg<f64>
+}
+
+impl std::str::FromStr for TargetInfoMessage {
+    type Err = Box<dyn Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (x, y, z, vx, vy, vz, track) = scan_fmt!(s, "{};{};{};{};{};{};{}", f64, f64, f64, f64, f64, f64, f64)?;
+
+        Ok(TargetInfoMessage{ position: Point3::new(x, y, z), velocity: Vector3::new(vx, vy, vz), track: Deg(track) })
+    }
+}
+
+impl std::fmt::Display for TargetInfoMessage  {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(
+            f, "{:.1};{:.1};{:.1};{:.1};{:.1};{:.1};{:.1}\n",
+            self.position.x, self.position.y, self.position.z,
+            self.velocity.x, self.velocity.y, self.velocity.z,
+            self.track.0
+        )
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct LatLon {
+    pub lat: Deg<f64>,
+    pub lon: Deg<f64>
+}
+
+impl LatLon {
+    pub fn new(lat: Deg<f64>, lon: Deg<f64>) -> LatLon {
+        LatLon{ lat, lon }
+    }
+}
+
+pub struct GeoPos {
+    pub lat_lon: LatLon,
+    pub elevation: f64
+}
 
 #[derive(Copy, Clone)]
 pub struct Vertex2 {
@@ -47,16 +97,19 @@ pub struct OpenGlObjects {
 }
 
 pub struct ProgramData {
-    pub camera_view: CameraView,
+    pub camera_view: Rc<RefCell<CameraView>>,
     gl_objects: OpenGlObjects,
-    pub gui_state: crate::gui::GuiState
+    pub gui_state: crate::gui::GuiState,
+    pub target_receiver: crossbeam::channel::Receiver<TargetInfoMessage>,
+    pub target_subscribers: subscriber_rs::SubscriberCollection<TargetInfoMessage>
 }
 
 impl ProgramData {
     pub fn new(
         renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>,
         display: &glium::Display,
-        gui_state: crate::gui::GuiState
+        gui_state: crate::gui::GuiState,
+        target_receiver: crossbeam::channel::Receiver<TargetInfoMessage>
     ) -> ProgramData {
         let sky_mesh_prog = Rc::new(program!(display,
             330 => {
@@ -104,10 +157,17 @@ impl ProgramData {
             target_prog
         };
 
+        let camera_view = Rc::new(RefCell::new(CameraView::new(&gl_objects, renderer, display)));
+
+        let mut target_subscribers = subscriber_rs::SubscriberCollection::<TargetInfoMessage>::new();
+        target_subscribers.add(Rc::downgrade(&camera_view) as _);
+
         ProgramData{
-            camera_view: CameraView::new(&gl_objects, renderer, display),
+            camera_view,
             gl_objects,
-            gui_state
+            gui_state,
+            target_receiver,
+            target_subscribers
         }
     }
 }
@@ -183,7 +243,7 @@ fn create_target_mesh(
 }
 
 fn create_sky_mesh(
-    step: cgmath::Deg<f32>,
+    step: cgmath::Deg<f64>,
     num_substeps: usize,
     display: &glium::Display
 ) -> MeshBuffers<Vertex3> {
@@ -195,12 +255,14 @@ fn create_sky_mesh(
         let mut latitude = cgmath::Deg(-90.0);
         let mut parallel_starts = true;
         while latitude <= cgmath::Deg(90.0) {
-            vertex_data.push(Vertex3{ position: *to_xyz_unit(latitude, longitude).as_ref() });
+            vertex_data.push(Vertex3{
+                position: *to_xyz_unit(&LatLon{ lat: latitude, lon: longitude }).cast::<f32>().unwrap().as_ref()
+            });
             if !parallel_starts {
                 index_data.push((vertex_data.len() - 2) as u32);
                 index_data.push((vertex_data.len() - 1) as u32);
             }
-            latitude += step / num_substeps as f32;
+            latitude += step / num_substeps as f64;
             parallel_starts = false;
         }
 
@@ -212,12 +274,14 @@ fn create_sky_mesh(
         let mut longitude = cgmath::Deg(-180.0);
         let mut meridian_starts = true;
         while longitude <= cgmath::Deg(180.0) {
-            vertex_data.push(Vertex3{ position: *to_xyz_unit(latitude, longitude).as_ref() });
+            vertex_data.push(Vertex3{
+                position: *to_xyz_unit(&LatLon{ lat: latitude, lon: longitude }).cast::<f32>().unwrap().as_ref()
+            });
             if !meridian_starts {
                 index_data.push((vertex_data.len() - 2) as u32);
                 index_data.push((vertex_data.len() - 1) as u32);
             }
-            longitude += step / num_substeps as f32;
+            longitude += step / num_substeps as f64;
             meridian_starts = false;
         }
 
@@ -231,10 +295,32 @@ fn create_sky_mesh(
 }
 
 /// Coordinates in Cartesian frame with lat. 0°, lon. 0° being (1, 0, 0) and the North Pole at (0, 0, 1).
-fn to_xyz_unit(lat: Deg<f32>, lon: Deg<f32>) -> Point3<f32> {
+pub fn to_xyz_unit(lat_lon: &LatLon) -> Point3<f64> {
     Point3{
-        x: Rad::from(lon).0.cos() * Rad::from(lat).0.cos(),
-        y: Rad::from(lon).0.sin() * Rad::from(lat).0.cos(),
-        z: Rad::from(lat).0.sin()
+        x: Rad::from(lat_lon.lon).0.cos() * Rad::from(lat_lon.lat).0.cos(),
+        y: Rad::from(lat_lon.lon).0.sin() * Rad::from(lat_lon.lat).0.cos(),
+        z: Rad::from(lat_lon.lat).0.sin()
     }
+}
+
+pub fn to_global(position: &GeoPos) -> Point3<f64> {
+    let r = EARTH_RADIUS + position.elevation;
+    r * to_xyz_unit(&position.lat_lon)
+}
+
+/// Converts position of `target` into `observer`s local frame (X points north, Y points west, Z points up).
+pub fn to_local(observer: &GeoPos, target: &GeoPos) -> Point3<f64> {
+    let obs_xyz = to_global(observer);
+    let target_xyz = to_global(target);
+    let local_z_axis = obs_xyz.to_vec().normalize();
+    let to_north_pole = Point3::new(0.0, 0.0, EARTH_RADIUS) - obs_xyz;
+    let local_y_axis = local_z_axis.cross(to_north_pole).normalize();
+    let local_x_axis = local_y_axis.cross(local_z_axis);
+    let to_target = target_xyz - obs_xyz;
+
+    let x = local_x_axis.dot(to_target);
+    let y = local_y_axis.dot(to_target);
+    let z = local_z_axis.dot(to_target);
+
+    Point3{ x, y, z }
 }

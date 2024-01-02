@@ -52,7 +52,7 @@ pub fn handle_gui(
         std::ptr::null()
     ); }
 
-    handle_camera_view(&mut program_data.camera_view, ui, &mut program_data.gui_state);
+    handle_camera_view(&mut program_data.camera_view.borrow_mut(), ui, &mut program_data.gui_state);
 
     None
 }
