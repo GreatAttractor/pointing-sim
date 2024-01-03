@@ -308,19 +308,23 @@ pub fn to_global(position: &GeoPos) -> Point3<f64> {
     r * to_xyz_unit(&position.lat_lon)
 }
 
-/// Converts position of `target` into `observer`s local frame (X points north, Y points west, Z points up).
-pub fn to_local(observer: &GeoPos, target: &GeoPos) -> Point3<f64> {
-    let obs_xyz = to_global(observer);
-    let target_xyz = to_global(target);
-    let local_z_axis = obs_xyz.to_vec().normalize();
-    let to_north_pole = Point3::new(0.0, 0.0, EARTH_RADIUS) - obs_xyz;
+pub fn to_local_from_global(observer_global: &Point3<f64>, target_global: &Point3<f64>) -> Point3<f64> {
+    let local_z_axis = observer_global.to_vec().normalize();
+    let to_north_pole = Point3::new(0.0, 0.0, EARTH_RADIUS) - observer_global;
     let local_y_axis = local_z_axis.cross(to_north_pole).normalize();
     let local_x_axis = local_y_axis.cross(local_z_axis);
-    let to_target = target_xyz - obs_xyz;
+    let to_target = target_global - observer_global;
 
     let x = local_x_axis.dot(to_target);
     let y = local_y_axis.dot(to_target);
     let z = local_z_axis.dot(to_target);
 
     Point3{ x, y, z }
+}
+
+/// Converts position of `target` into `observer`s local frame (X points north, Y points west, Z points up).
+pub fn to_local(observer: &GeoPos, target: &GeoPos) -> Point3<f64> {
+    let obs_xyz = to_global(observer);
+    let target_xyz = to_global(target);
+    to_local_from_global(&obs_xyz, &target_xyz)
 }
