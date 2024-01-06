@@ -7,10 +7,10 @@
 //
 
 use cgmath::{Basis3, Deg, EuclideanSpace, InnerSpace, Rad, Rotation, Rotation3};
-use crate::gui::CameraView;
+use crate::{gui::CameraView, target_interpolator::TargetInterpolator};
 use glium::program;
 use scan_fmt::scan_fmt;
-use std::{cell::RefCell, error::Error, marker::PhantomData, rc::{Rc, Weak}};
+use std::{cell::RefCell, error::Error, marker::PhantomData, rc::Rc};
 
 /// Arithmetic mean radius (R1) as per IUGG.
 pub const EARTH_RADIUS: f64 = 6_371_008.8;
@@ -19,17 +19,17 @@ pub trait FrameOfReference {}
 
 /// Global frame of reference; origin at Earth's center, X points to lat. 0°/lon. 0°, Y points to lat. 0°/lon. 90°,
 /// Z points to the North Pole.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Global;
 
 /// Observer's local frame of reference; X points north, Y points west, Z points up.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Local;
 
 impl FrameOfReference for Global {}
 impl FrameOfReference for Local {}
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Point3<S, T: FrameOfReference>(pub cgmath::Point3<S>, PhantomData<T>);
 
 impl<S, T: FrameOfReference> Point3<S, T> {
@@ -42,7 +42,7 @@ impl<S, T: FrameOfReference> Point3<S, T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Vector3<S, T: FrameOfReference>(pub cgmath::Vector3<S>, PhantomData<T>);
 
 impl<S, T: FrameOfReference> Vector3<S, T> {
@@ -56,7 +56,7 @@ impl<S, T: FrameOfReference> Vector3<S, T> {
 }
 
 /// Target information using observer's frame of reference (X points north, Z points up, Y points west).
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TargetInfoMessage {
     pub position: Point3<f64, Local>,
     pub velocity: Vector3<f64, Local>,
@@ -145,7 +145,8 @@ pub struct ProgramData {
     gl_objects: OpenGlObjects,
     pub gui_state: crate::gui::GuiState,
     pub target_receiver: crossbeam::channel::Receiver<TargetInfoMessage>,
-    pub target_subscribers: subscriber_rs::SubscriberCollection<TargetInfoMessage>
+    pub target_subscribers: subscriber_rs::SubscriberCollection<TargetInfoMessage>,
+    pub target_interpolator: Rc<RefCell<TargetInterpolator>>
 }
 
 impl ProgramData {
@@ -203,15 +204,19 @@ impl ProgramData {
 
         let camera_view = Rc::new(RefCell::new(CameraView::new(&gl_objects, renderer, display)));
 
+        let target_interpolator = Rc::new(RefCell::new(TargetInterpolator::new()));
+        target_interpolator.borrow_mut().add_subscriber(Rc::downgrade(&camera_view) as _);
+
         let mut target_subscribers = subscriber_rs::SubscriberCollection::<TargetInfoMessage>::new();
-        target_subscribers.add(Rc::downgrade(&camera_view) as _);
+        target_subscribers.add(Rc::downgrade(&target_interpolator) as _);
 
         ProgramData{
             camera_view,
             gl_objects,
             gui_state,
             target_receiver,
-            target_subscribers
+            target_subscribers,
+            target_interpolator
         }
     }
 }
@@ -341,7 +346,6 @@ fn create_sky_mesh(
     MeshBuffers{ vertices, indices }
 }
 
-/// Coordinates in Cartesian frame with lat. 0°, lon. 0° being (1, 0, 0) and the North Pole at (0, 0, 1).
 pub fn to_global_unit(lat_lon: &LatLon) -> Point3<f64, Global> {
     Point3::<f64, Global>::from_xyz(
         Rad::from(lat_lon.lon).0.cos() * Rad::from(lat_lon.lat).0.cos(),
@@ -355,7 +359,7 @@ pub fn to_global(position: &GeoPos) -> Point3<f64, Global> {
     Point3::<f64, Global>::from(r * to_global_unit(&position.lat_lon).0)
 }
 
-pub fn to_local_from_global(observer: &Point3<f64, Global>, target: &Point3<f64, Global>) -> Point3<f64, Local> {
+pub fn to_local_point(observer: &Point3<f64, Global>, target: &Point3<f64, Global>) -> Point3<f64, Local> {
     let local_z_axis = observer.0.to_vec().normalize();
     let to_north_pole = cgmath::Point3::new(0.0, 0.0, EARTH_RADIUS) - observer.0;
     let local_y_axis = local_z_axis.cross(to_north_pole).normalize();
@@ -369,8 +373,9 @@ pub fn to_local_from_global(observer: &Point3<f64, Global>, target: &Point3<f64,
     Point3::<f64, Local>::from_xyz(x, y, z)
 }
 
-pub fn to_local(observer: &GeoPos, target: &GeoPos) -> Point3<f64, Local> {
-    let obs_global = to_global(observer);
-    let target_global = to_global(target);
-    to_local_from_global(&obs_global, &target_global)
+pub fn to_local_vec(observer: &Point3<f64, Global>, v: &Vector3<f64, Global>) -> Vector3<f64, Local> {
+    let earth_center = to_local_point(observer, &Point3::<f64, Global>::from(cgmath::Point3::origin()));
+    let p = to_local_point(observer, &Point3::<f64, Global>::from(cgmath::Point3::from_vec(v.0)));
+
+    Vector3::<f64, Local>::from(p.0 - earth_center.0)
 }

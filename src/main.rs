@@ -9,6 +9,7 @@
 mod data;
 mod gui;
 mod runner;
+mod target_interpolator;
 mod workers;
 
 use crossbeam::channel::TryRecvError;
@@ -48,6 +49,8 @@ fn main() {
                 _ => panic!("unexpected error: {}", e)
             }
         }
+
+        data.as_ref().unwrap().target_interpolator.borrow_mut().interpolate();
 
         gui::handle_gui(data.as_mut().unwrap(), ui, renderer, display)
     });
