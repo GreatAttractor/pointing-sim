@@ -134,7 +134,7 @@ impl Subscriber<TargetInfoMessage> for CameraView {
         // we need to use track (actual azimuth of travel), as we
         // do not get heading (aircraft orientation) from ADS-B messages
         self.target_heading = Deg(value.track.0 as f32);
-        self.target_pos = value.position.cast::<f32>().unwrap();
+        self.target_pos = value.position.0.cast::<f32>().unwrap();
         self.dir = self.target_pos.to_vec();
         self.gl_view = Matrix4::look_to_rh(Point3::origin(), self.dir, self.up);
         self.render();

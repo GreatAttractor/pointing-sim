@@ -6,20 +6,60 @@
 // (see the LICENSE file for details).
 //
 
-use cgmath::{Basis3, Deg, EuclideanSpace, InnerSpace, Point3, Rad, Rotation, Rotation3, Vector3};
+use cgmath::{Basis3, Deg, EuclideanSpace, InnerSpace, Rad, Rotation, Rotation3};
 use crate::gui::CameraView;
 use glium::program;
 use scan_fmt::scan_fmt;
-use std::{cell::RefCell, error::Error, rc::{Rc, Weak}};
+use std::{cell::RefCell, error::Error, marker::PhantomData, rc::{Rc, Weak}};
 
 /// Arithmetic mean radius (R1) as per IUGG.
 pub const EARTH_RADIUS: f64 = 6_371_008.8;
 
+pub trait FrameOfReference {}
+
+/// Global frame of reference; origin at Earth's center, X points to lat. 0°/lon. 0°, Y points to lat. 0°/lon. 90°,
+/// Z points to the North Pole.
+#[derive(Debug)]
+pub struct Global;
+
+/// Observer's local frame of reference; X points north, Y points west, Z points up.
+#[derive(Debug)]
+pub struct Local;
+
+impl FrameOfReference for Global {}
+impl FrameOfReference for Local {}
+
+#[derive(Debug)]
+pub struct Point3<S, T: FrameOfReference>(pub cgmath::Point3<S>, PhantomData<T>);
+
+impl<S, T: FrameOfReference> Point3<S, T> {
+    pub fn from(p: cgmath::Point3<S>) -> Point3<S, T> {
+        Point3(p, Default::default())
+    }
+
+    pub fn from_xyz(x: S, y: S, z: S) -> Point3<S, T> {
+        Point3(cgmath::Point3::new(x, y, z), Default::default())
+    }
+}
+
+#[derive(Debug)]
+pub struct Vector3<S, T: FrameOfReference>(pub cgmath::Vector3<S>, PhantomData<T>);
+
+impl<S, T: FrameOfReference> Vector3<S, T> {
+    pub fn from(p: cgmath::Vector3<S>) -> Vector3<S, T> {
+        Vector3(p, Default::default())
+    }
+
+    pub fn from_xyz(x: S, y: S, z: S) -> Vector3<S, T> {
+        Vector3(cgmath::Vector3::new(x, y, z), Default::default())
+    }
+}
+
 /// Target information using observer's frame of reference (X points north, Z points up, Y points west).
 #[derive(Debug)]
 pub struct TargetInfoMessage {
-    pub position: Point3<f64>,
-    pub velocity: Vector3<f64>,
+    pub position: Point3<f64, Local>,
+    pub velocity: Vector3<f64, Local>,
     pub track: Deg<f64>
 }
 
@@ -29,7 +69,11 @@ impl std::str::FromStr for TargetInfoMessage {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (x, y, z, vx, vy, vz, track) = scan_fmt!(s, "{};{};{};{};{};{};{}", f64, f64, f64, f64, f64, f64, f64)?;
 
-        Ok(TargetInfoMessage{ position: Point3::new(x, y, z), velocity: Vector3::new(vx, vy, vz), track: Deg(track) })
+        Ok(TargetInfoMessage{
+            position: Point3::<f64, Local>::from_xyz(x, y, z),
+            velocity: Vector3::<f64, Local>::from_xyz(vx, vy, vz),
+            track: Deg(track)
+        })
     }
 }
 
@@ -37,8 +81,8 @@ impl std::fmt::Display for TargetInfoMessage  {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(
             f, "{:.1};{:.1};{:.1};{:.1};{:.1};{:.1};{:.1}\n",
-            self.position.x, self.position.y, self.position.z,
-            self.velocity.x, self.velocity.y, self.velocity.z,
+            self.position.0.x, self.position.0.y, self.position.0.z,
+            self.velocity.0.x, self.velocity.0.y, self.velocity.0.z,
             self.track.0
         )
     }
@@ -175,6 +219,9 @@ impl ProgramData {
 fn create_target_mesh(
     display: &glium::Display
 ) -> MeshBuffers<MeshVertex> {
+    use cgmath::Point3 as Point3;
+    use cgmath::Vector3 as Vector3;
+
     // dimensions based on B737 MAX
     const LENGTH: f32 = 35.56;
     const FUSELAGE_D: f32 = 3.76;
@@ -256,7 +303,7 @@ fn create_sky_mesh(
         let mut parallel_starts = true;
         while latitude <= cgmath::Deg(90.0) {
             vertex_data.push(Vertex3{
-                position: *to_xyz_unit(&LatLon{ lat: latitude, lon: longitude }).cast::<f32>().unwrap().as_ref()
+                position: *to_global_unit(&LatLon{ lat: latitude, lon: longitude }).0.cast::<f32>().unwrap().as_ref()
             });
             if !parallel_starts {
                 index_data.push((vertex_data.len() - 2) as u32);
@@ -275,7 +322,7 @@ fn create_sky_mesh(
         let mut meridian_starts = true;
         while longitude <= cgmath::Deg(180.0) {
             vertex_data.push(Vertex3{
-                position: *to_xyz_unit(&LatLon{ lat: latitude, lon: longitude }).cast::<f32>().unwrap().as_ref()
+                position: *to_global_unit(&LatLon{ lat: latitude, lon: longitude }).0.cast::<f32>().unwrap().as_ref()
             });
             if !meridian_starts {
                 index_data.push((vertex_data.len() - 2) as u32);
@@ -295,36 +342,35 @@ fn create_sky_mesh(
 }
 
 /// Coordinates in Cartesian frame with lat. 0°, lon. 0° being (1, 0, 0) and the North Pole at (0, 0, 1).
-pub fn to_xyz_unit(lat_lon: &LatLon) -> Point3<f64> {
-    Point3{
-        x: Rad::from(lat_lon.lon).0.cos() * Rad::from(lat_lon.lat).0.cos(),
-        y: Rad::from(lat_lon.lon).0.sin() * Rad::from(lat_lon.lat).0.cos(),
-        z: Rad::from(lat_lon.lat).0.sin()
-    }
+pub fn to_global_unit(lat_lon: &LatLon) -> Point3<f64, Global> {
+    Point3::<f64, Global>::from_xyz(
+        Rad::from(lat_lon.lon).0.cos() * Rad::from(lat_lon.lat).0.cos(),
+        Rad::from(lat_lon.lon).0.sin() * Rad::from(lat_lon.lat).0.cos(),
+        Rad::from(lat_lon.lat).0.sin()
+    )
 }
 
-pub fn to_global(position: &GeoPos) -> Point3<f64> {
+pub fn to_global(position: &GeoPos) -> Point3<f64, Global> {
     let r = EARTH_RADIUS + position.elevation;
-    r * to_xyz_unit(&position.lat_lon)
+    Point3::<f64, Global>::from(r * to_global_unit(&position.lat_lon).0)
 }
 
-pub fn to_local_from_global(observer_global: &Point3<f64>, target_global: &Point3<f64>) -> Point3<f64> {
-    let local_z_axis = observer_global.to_vec().normalize();
-    let to_north_pole = Point3::new(0.0, 0.0, EARTH_RADIUS) - observer_global;
+pub fn to_local_from_global(observer: &Point3<f64, Global>, target: &Point3<f64, Global>) -> Point3<f64, Local> {
+    let local_z_axis = observer.0.to_vec().normalize();
+    let to_north_pole = cgmath::Point3::new(0.0, 0.0, EARTH_RADIUS) - observer.0;
     let local_y_axis = local_z_axis.cross(to_north_pole).normalize();
     let local_x_axis = local_y_axis.cross(local_z_axis);
-    let to_target = target_global - observer_global;
+    let to_target = target.0 - observer.0;
 
     let x = local_x_axis.dot(to_target);
     let y = local_y_axis.dot(to_target);
     let z = local_z_axis.dot(to_target);
 
-    Point3{ x, y, z }
+    Point3::<f64, Local>::from_xyz(x, y, z)
 }
 
-/// Converts position of `target` into `observer`s local frame (X points north, Y points west, Z points up).
-pub fn to_local(observer: &GeoPos, target: &GeoPos) -> Point3<f64> {
-    let obs_xyz = to_global(observer);
-    let target_xyz = to_global(target);
-    to_local_from_global(&obs_xyz, &target_xyz)
+pub fn to_local(observer: &GeoPos, target: &GeoPos) -> Point3<f64, Local> {
+    let obs_global = to_global(observer);
+    let target_global = to_global(target);
+    to_local_from_global(&obs_global, &target_global)
 }
