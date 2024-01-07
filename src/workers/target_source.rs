@@ -18,13 +18,19 @@ use pointing_utils::{
     to_local_point,
     to_local_vec,
     Vector3,
+    uom
 };
 use std::io::Write;
 use std::net::TcpListener;
+use uom::{si::f64, si::length};
 
 const MSG_DELTA_T: std::time::Duration = std::time::Duration::from_millis(1000);
 
 pub const TARGET_SOURCE_PORT: u16 = 26262;
+
+fn meters(value: f64) -> f64::Length {
+    f64::Length::new::<length::meter>(value)
+}
 
 pub fn target_source() {
     type P3G = Point3<f64, Global>;
@@ -34,8 +40,8 @@ pub fn target_source() {
     let mut stream = listener.incoming().next().unwrap().unwrap();
     log::info!("client connected");
 
-    let observer_pos = to_global(&GeoPos{ lat_lon: LatLon::new(Deg(0.0), Deg(0.0)), elevation: 0.0 });
-    let target_elevation = 5000.0;
+    let observer_pos = to_global(&GeoPos{ lat_lon: LatLon::new(Deg(0.0), Deg(0.0)), elevation: meters(0.0) });
+    let target_elevation = meters(5000.0);
     let target_initial_pos = GeoPos{ lat_lon: LatLon::new(Deg(0.05), Deg(0.1)), elevation: target_elevation };
     let mut target_pos = to_global(&target_initial_pos);
     let north_pole = Point3::<f64, Global>::from_xyz(0.0, 0.0, EARTH_RADIUS_M);
@@ -47,7 +53,7 @@ pub fn target_source() {
     loop {
         // assume level flight
         let arc_length = t_last_update.elapsed().as_secs_f64() * target_speed;
-        let travel_angle = Rad(arc_length / (EARTH_RADIUS_M + target_elevation));
+        let travel_angle = Rad(arc_length / (EARTH_RADIUS_M + target_elevation.get::<length::meter>()));
         let to_north_pole = V3G::from(north_pole.0 - target_pos.0);
         let west = V3G::from(target_pos.0.to_vec().cross(to_north_pole.0));
         let north = V3G::from(west.0.cross(target_pos.0.to_vec()).normalize());
