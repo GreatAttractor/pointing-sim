@@ -1,3 +1,11 @@
+//
+// Pointing Simulator
+// Copyright (c) 2024 Filip Szczerek <ga.software@yahoo.com>
+//
+// This project is licensed under the terms of the MIT license
+// (see the LICENSE file for details).
+//
+
 use crate::data::{Local, Point3, Vector3, TargetInfoMessage};
 use std::{cell::RefCell, rc::Weak};
 use subscriber_rs::{Subscriber, SubscriberCollection};
