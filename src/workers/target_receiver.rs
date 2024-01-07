@@ -6,8 +6,8 @@
 // (see the LICENSE file for details).
 //
 
-use crate::data::TargetInfoMessage;
 use crate::workers;
+use pointing_utils::TargetInfoMessage;
 use std::{
     io::BufRead,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream}
@@ -28,7 +28,6 @@ pub fn target_receiver(sender: crossbeam::channel::Sender<TargetInfoMessage>) {
     let buf_reader = std::io::BufReader::new(stream);
 
     for message in buf_reader.lines() {
-        //log::debug!("message received: {:?}", message.unwrap().parse::<TargetInfoMessage>().unwrap());
         let _ = sender.send(message.unwrap().parse::<TargetInfoMessage>().unwrap());
     }
 }

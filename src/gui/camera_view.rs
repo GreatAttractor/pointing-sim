@@ -7,8 +7,9 @@
 //
 
 use cgmath::{Basis3, Deg, EuclideanSpace, InnerSpace, Matrix3, Matrix4, Point3, Rotation3, SquareMatrix, Vector3};
-use crate::{data, data::{MeshVertex, TargetInfoMessage, Vertex3}, gui::draw_buffer::{DrawBuffer, Sampling}};
+use crate::{data, data::{MeshVertex, Vertex3}, gui::draw_buffer::{DrawBuffer, Sampling}};
 use glium::{Surface, uniform};
+use pointing_utils::{TargetInfoMessage};
 use std::{cell::RefCell, rc::Rc};
 use subscriber_rs::Subscriber;
 

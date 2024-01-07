@@ -6,8 +6,19 @@
 // (see the LICENSE file for details).
 //
 
-use cgmath::{Basis3, Deg, EuclideanSpace, InnerSpace, Rad, Rotation, Rotation3, Zero};
-use crate::{data, data::{GeoPos, Global, LatLon, Local, Point3, TargetInfoMessage, Vector3}};
+use cgmath::{Basis3, Deg, EuclideanSpace, InnerSpace, Rad, Rotation, Rotation3};
+use pointing_utils::{
+    EARTH_RADIUS_M,
+    GeoPos,
+    Global,
+    LatLon,
+    Point3,
+    TargetInfoMessage,
+    to_global,
+    to_local_point,
+    to_local_vec,
+    Vector3,
+};
 use std::io::Write;
 use std::net::TcpListener;
 
@@ -23,11 +34,11 @@ pub fn target_source() {
     let mut stream = listener.incoming().next().unwrap().unwrap();
     log::info!("client connected");
 
-    let observer_pos = data::to_global(&GeoPos{ lat_lon: LatLon::new(Deg(0.0), Deg(0.0)), elevation: 0.0 });
+    let observer_pos = to_global(&GeoPos{ lat_lon: LatLon::new(Deg(0.0), Deg(0.0)), elevation: 0.0 });
     let target_elevation = 5000.0;
     let target_initial_pos = GeoPos{ lat_lon: LatLon::new(Deg(0.05), Deg(0.1)), elevation: target_elevation };
-    let mut target_pos = data::to_global(&target_initial_pos);
-    let north_pole = Point3::<f64, Global>::from_xyz(0.0, 0.0, data::EARTH_RADIUS);
+    let mut target_pos = to_global(&target_initial_pos);
+    let north_pole = Point3::<f64, Global>::from_xyz(0.0, 0.0, EARTH_RADIUS_M);
 
     let track = Deg(-90.0);
     let target_speed = 200.0;
@@ -36,7 +47,7 @@ pub fn target_source() {
     loop {
         // assume level flight
         let arc_length = t_last_update.elapsed().as_secs_f64() * target_speed;
-        let travel_angle = Rad(arc_length / (data::EARTH_RADIUS + target_elevation));
+        let travel_angle = Rad(arc_length / (EARTH_RADIUS_M + target_elevation));
         let to_north_pole = V3G::from(north_pole.0 - target_pos.0);
         let west = V3G::from(target_pos.0.to_vec().cross(to_north_pole.0));
         let north = V3G::from(west.0.cross(target_pos.0.to_vec()).normalize());
@@ -46,8 +57,8 @@ pub fn target_source() {
         t_last_update = std::time::Instant::now();
 
         stream.write_all(TargetInfoMessage{
-            position: data::to_local_point(&observer_pos, &target_pos),
-            velocity: data::to_local_vec(&observer_pos, &V3G::from(track_dir.0 * target_speed)),
+            position: to_local_point(&observer_pos, &target_pos),
+            velocity: to_local_vec(&observer_pos, &V3G::from(track_dir.0 * target_speed)),
             track
         }.to_string().as_bytes()).unwrap();
 

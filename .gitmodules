@@ -1,3 +1,6 @@
 [submodule "ext/subscriber-rs"]
 	path = ext/subscriber-rs
 	url = https://github.com/GreatAttractor/subscriber-rs.git
+[submodule "ext/pointing-utils"]
+	path = ext/pointing-utils
+	url = https://github.com/GreatAttractor/pointing-utils.git

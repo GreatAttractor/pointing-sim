@@ -6,7 +6,7 @@
 // (see the LICENSE file for details).
 //
 
-use crate::data::{Local, Point3, Vector3, TargetInfoMessage};
+use pointing_utils::{Local, Point3, Vector3, TargetInfoMessage};
 use std::{cell::RefCell, rc::Weak};
 use subscriber_rs::{Subscriber, SubscriberCollection};
 
