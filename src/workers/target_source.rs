@@ -20,13 +20,12 @@ use pointing_utils::{
     Vector3,
     uom
 };
-use std::io::Write;
-use std::net::TcpListener;
+use std::{io::Write, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}};
 use uom::{si::f64, si::length};
 
-const MSG_DELTA_T: std::time::Duration = std::time::Duration::from_millis(1000);
+const MSG_DELTA_T: std::time::Duration = std::time::Duration::from_millis(250);
 
-pub const TARGET_SOURCE_PORT: u16 = 26262;
+pub const TARGET_SOURCE_PORT: u16 = 45500;
 
 fn meters(value: f64) -> f64::Length {
     f64::Length::new::<length::meter>(value)
@@ -35,10 +34,19 @@ fn meters(value: f64) -> f64::Length {
 pub fn target_source() {
     type P3G = Point3<f64, Global>;
     type V3G = Vector3<f64, Global>;
-    log::info!("waiting for client connection");
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", TARGET_SOURCE_PORT)).unwrap();
-    let mut stream = listener.incoming().next().unwrap().unwrap();
-    log::info!("client connected");
+
+    let clients = Arc::new(Mutex::new(Vec::<TcpStream>::new()));
+
+    let clients2 = Arc::clone(&clients);
+    std::thread::spawn(move || {
+        log::info!("waiting for clients");
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", TARGET_SOURCE_PORT)).unwrap();
+        loop {
+            let (stream, _) = listener.accept().unwrap();
+            log::info!("client connected");
+            clients2.lock().unwrap().push(stream);
+        }
+    });
 
     let observer_pos = to_global(&GeoPos{ lat_lon: LatLon::new(Deg(0.0), Deg(0.0)), elevation: meters(0.0) });
     let target_elevation = meters(5000.0);
@@ -62,12 +70,13 @@ pub fn target_source() {
         target_pos = P3G::from(Basis3::from_axis_angle(fwd_axis.0, travel_angle).rotate_point(target_pos.0));
         t_last_update = std::time::Instant::now();
 
-        stream.write_all(TargetInfoMessage{
-            position: to_local_point(&observer_pos, &target_pos),
-            velocity: to_local_vec(&observer_pos, &V3G::from(track_dir.0 * target_speed)),
-            track
-        }.to_string().as_bytes()).unwrap();
-
+        for client in clients.lock().unwrap().iter_mut() {
+            client.write_all(TargetInfoMessage{
+                position: to_local_point(&observer_pos, &target_pos),
+                velocity: to_local_vec(&observer_pos, &V3G::from(track_dir.0 * target_speed)),
+                track
+            }.to_string().as_bytes()).unwrap();
+        }
 
         std::thread::sleep(MSG_DELTA_T);
     }
