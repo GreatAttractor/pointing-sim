@@ -34,9 +34,13 @@ fn main() {
 
     runner.main_loop(move |_, ui, display, renderer| {
         if data.is_none() {
+
             let (sender_worker, receiver_main) = crossbeam::channel::unbounded();
+            std::thread::spawn(move || { workers::mount_server(sender_worker) });
 
             std::thread::spawn(|| { workers::target_source() });
+
+            let (sender_worker, receiver_main) = crossbeam::channel::unbounded();
             std::thread::spawn(move || { workers::target_receiver(sender_worker) });
 
             data = Some(data::ProgramData::new(renderer, display, gui_state.take().unwrap(), receiver_main));
