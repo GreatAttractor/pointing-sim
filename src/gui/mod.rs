@@ -9,7 +9,7 @@
 mod camera_view;
 mod draw_buffer;
 
-use crate::{data, runner};
+use crate::{data, runner, workers::MountState};
 use std::{cell::RefCell, rc::Rc};
 
 pub use camera_view::CameraView;
@@ -52,7 +52,12 @@ pub fn handle_gui(
         std::ptr::null()
     ); }
 
-    handle_camera_view(&mut program_data.camera_view.borrow_mut(), ui, &mut program_data.gui_state);
+    handle_camera_view(
+        &mut program_data.camera_view.borrow_mut(),
+        ui,
+        &mut program_data.gui_state,
+        &program_data.mount.get()
+    );
 
     None
 }
@@ -60,7 +65,8 @@ pub fn handle_gui(
 fn handle_camera_view(
     camera_view: &mut CameraView,
     ui: &imgui::Ui,
-    gui_state: &mut GuiState
+    gui_state: &mut GuiState,
+    mount_state: &MountState
 ) {
     ui.window(&format!("Camera view"))
         .size([640.0, 640.0], imgui::Condition::FirstUseEver)
@@ -73,6 +79,8 @@ fn handle_camera_view(
                 adjusted.physical_size[0],
                 adjusted.physical_size[1]
             );
+
+            camera_view.set_mount_state(mount_state);
 
             imgui::Image::new(camera_view.draw_buf_id(), adjusted.logical_size).build(ui);
         });

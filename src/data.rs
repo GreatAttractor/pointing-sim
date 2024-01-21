@@ -7,10 +7,10 @@
 //
 
 use cgmath::{Basis3, Deg, EuclideanSpace, InnerSpace, Rad, Rotation, Rotation3};
-use crate::{gui::CameraView, target_interpolator::TargetInterpolator};
+use crate::{gui::CameraView, workers::Mount, target_interpolator::TargetInterpolator};
 use glium::program;
 use pointing_utils::{TargetInfoMessage, LatLon, to_global_unit};
-use std::{cell::RefCell, error::Error, rc::Rc};
+use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 
 #[derive(Copy, Clone)]
 pub struct Vertex2 {
@@ -53,7 +53,8 @@ pub struct ProgramData {
     pub gui_state: crate::gui::GuiState,
     pub target_receiver: crossbeam::channel::Receiver<TargetInfoMessage>,
     pub target_subscribers: subscriber_rs::SubscriberCollection<TargetInfoMessage>,
-    pub target_interpolator: Rc<RefCell<TargetInterpolator>>
+    pub target_interpolator: Rc<RefCell<TargetInterpolator>>,
+    pub mount: Arc<Mount>
 }
 
 impl ProgramData {
@@ -61,7 +62,8 @@ impl ProgramData {
         renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>,
         display: &glium::Display,
         gui_state: crate::gui::GuiState,
-        target_receiver: crossbeam::channel::Receiver<TargetInfoMessage>
+        target_receiver: crossbeam::channel::Receiver<TargetInfoMessage>,
+        mount: Arc<Mount>
     ) -> ProgramData {
         let sky_mesh_prog = Rc::new(program!(display,
             330 => {
@@ -123,7 +125,8 @@ impl ProgramData {
             gui_state,
             target_receiver,
             target_subscribers,
-            target_interpolator
+            target_interpolator,
+            mount
         }
     }
 }

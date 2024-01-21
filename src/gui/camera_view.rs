@@ -6,12 +6,15 @@
 // (see the LICENSE file for details).
 //
 
-use cgmath::{Basis3, Deg, EuclideanSpace, InnerSpace, Matrix3, Matrix4, Point3, Rotation3, SquareMatrix, Vector3};
-use crate::{data, data::{MeshVertex, Vertex3}, gui::draw_buffer::{DrawBuffer, Sampling}};
+use cgmath::{
+    Basis3, Deg, EuclideanSpace, InnerSpace, Matrix3, Matrix4, Point3, Rotation, Rotation3, SquareMatrix, Vector3
+};
+use crate::{data, data::{MeshVertex, Vertex3}, gui::draw_buffer::{DrawBuffer, Sampling}, workers::MountState};
 use glium::{Surface, uniform};
-use pointing_utils::{TargetInfoMessage};
+use pointing_utils::{TargetInfoMessage, uom};
 use std::{cell::RefCell, rc::Rc};
 use subscriber_rs::Subscriber;
+use uom::{si::f64, si::angle};
 
 pub struct CameraView {
     dir: Vector3<f32>,
@@ -34,7 +37,7 @@ impl CameraView {
         renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>,
         display: &glium::Display
     ) -> CameraView {
-        let field_of_view_y = Deg(2.0);
+        let field_of_view_y = Deg(20.0); //Deg(2.0);
         let target_pos = Point3{ x: 2000.0, y: 0.0, z: 500.0 };
         let dir = target_pos.to_vec();
         let up = Vector3{ x: 0.0, y: 0.0, z: 1.0 };
@@ -71,6 +74,18 @@ impl CameraView {
             self.wh_ratio = width as f32 / height as f32;
             self.render()
         }
+    }
+
+    pub fn set_mount_state(&mut self, mount_state: &MountState) {
+        let x_unit = Vector3{ x: 1.0, y: 0.0, z: 0.0 };
+        let azimuth = mount_state.axis1_pos;
+        let altitude = mount_state.axis2_pos;
+        let dir = Basis3::from_angle_z(-Deg(azimuth.get::<angle::degree>())).rotate_vector(
+            Basis3::from_angle_y(-Deg(altitude.get::<angle::degree>())).rotate_vector(x_unit)
+        );
+        self.dir = dir.cast::<f32>().unwrap();
+        self.gl_view = Matrix4::look_to_rh(Point3::origin(), self.dir, self.up);
+        self.render();
     }
 
     fn render(&self) {
@@ -136,8 +151,6 @@ impl Subscriber<TargetInfoMessage> for CameraView {
         // do not get heading (aircraft orientation) from ADS-B messages
         self.target_heading = Deg(value.track.0 as f32);
         self.target_pos = value.position.0.cast::<f32>().unwrap();
-        self.dir = self.target_pos.to_vec();
-        self.gl_view = Matrix4::look_to_rh(Point3::origin(), self.dir, self.up);
         self.render();
     }
 }

@@ -13,6 +13,7 @@ mod target_interpolator;
 mod workers;
 
 use crossbeam::channel::TryRecvError;
+use std::sync::Arc;
 
 fn main() {
     let tz_offset = chrono::Local::now().offset().clone();
@@ -34,16 +35,16 @@ fn main() {
 
     runner.main_loop(move |_, ui, display, renderer| {
         if data.is_none() {
-
-            let (sender_worker, receiver_main) = crossbeam::channel::unbounded();
-            std::thread::spawn(move || { workers::mount_server(sender_worker) });
+            let mount = Arc::new(workers::Mount::new());
+            let mount2 = Arc::clone(&mount);
+            std::thread::spawn(move || { workers::mount_model(mount2) });
 
             std::thread::spawn(|| { workers::target_source() });
 
             let (sender_worker, receiver_main) = crossbeam::channel::unbounded();
             std::thread::spawn(move || { workers::target_receiver(sender_worker) });
 
-            data = Some(data::ProgramData::new(renderer, display, gui_state.take().unwrap(), receiver_main));
+            data = Some(data::ProgramData::new(renderer, display, gui_state.take().unwrap(), receiver_main, mount));
         }
 
         match data.as_ref().unwrap().target_receiver.try_recv() {
