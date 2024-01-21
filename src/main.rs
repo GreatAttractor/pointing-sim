@@ -16,6 +16,11 @@ use crossbeam::channel::TryRecvError;
 use std::sync::Arc;
 
 fn main() {
+    std::panic::set_hook(Box::new(|_| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        log::error!("panicked!\n\n{}", backtrace);
+    }));
+
     let tz_offset = chrono::Local::now().offset().clone();
     simplelog::SimpleLogger::init(
         simplelog::LevelFilter::Debug,
