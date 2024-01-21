@@ -115,47 +115,58 @@ fn deg_per_s_sq(value: f64) -> f64::AngularAcceleration {
     f64::AngularAcceleration::new::<angular_acceleration::degree_per_second_squared>(value)
 }
 
-// TODO: allow connecting&disconnecting more than once
 pub fn mount_model(mount: Arc<Mount>) {
     type Msg = MountSimulatorMessage;
 
-    log::info!("waiting for client");
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", MOUNT_SERVER_PORT)).unwrap();
-    let (mut stream, _) = listener.accept().unwrap();
-    log::info!("client connected");
-
     loop {
-        let msg_s = read_line(&mut stream).unwrap();
-        match msg_s.parse::<Msg>() {
-            Err(e) => log::error!("error parsing mount message: {}", e),
+        let (mut stream, _) = {
+            log::info!("waiting for client");
+            let listener = TcpListener::bind(format!("127.0.0.1:{}", MOUNT_SERVER_PORT)).unwrap();
+            let stream = listener.accept().unwrap();
+            log::info!("client connected");
+            stream
+        };
 
-            Ok(msg) => match msg {
-                Msg::GetPosition => {
-                    let state = mount.get();
-                    stream.write_all(
-                        &Msg::Position(Ok((state.axis1_pos, state.axis2_pos))).to_string().as_bytes()
-                    ).unwrap()
-                },
+        loop {
+            let msg_s = match read_line(&mut stream) {
+                Ok(s) => s,
+                Err(e) => {
+                    log::info!("error receiving message ({}); disconnecting from client", e);
+                    break;
+                }
+            };
 
-                Msg::Slew{axis1, axis2} => {
-                    {
-                        let mut state = mount.priv_state.write().unwrap();
-                        state.axis1.set_target_speed(axis1);
-                        state.axis2.set_target_speed(axis2);
-                    }
-                    stream.write_all(&Msg::Reply(Ok(())).to_string().as_bytes()).unwrap();
-                },
+            match msg_s.parse::<Msg>() {
+                Err(e) => log::error!("error parsing mount message: {}", e),
 
-                Msg::Stop => {
-                    {
-                        let mut state = mount.priv_state.write().unwrap();
-                        state.axis1.set_target_speed(deg_per_s(0.0));
-                        state.axis2.set_target_speed(deg_per_s(0.0));
-                    }
-                    stream.write_all(&Msg::Reply(Ok(())).to_string().as_bytes()).unwrap();
-                },
+                Ok(msg) => match msg {
+                    Msg::GetPosition => {
+                        let state = mount.get();
+                        stream.write_all(
+                            &Msg::Position(Ok((state.axis1_pos, state.axis2_pos))).to_string().as_bytes()
+                        ).unwrap()
+                    },
 
-                _ => log::error!("unexpected message: {}", msg_s)
+                    Msg::Slew{axis1, axis2} => {
+                        {
+                            let mut state = mount.priv_state.write().unwrap();
+                            state.axis1.set_target_speed(axis1);
+                            state.axis2.set_target_speed(axis2);
+                        }
+                        stream.write_all(&Msg::Reply(Ok(())).to_string().as_bytes()).unwrap();
+                    },
+
+                    Msg::Stop => {
+                        {
+                            let mut state = mount.priv_state.write().unwrap();
+                            state.axis1.set_target_speed(deg_per_s(0.0));
+                            state.axis2.set_target_speed(deg_per_s(0.0));
+                        }
+                        stream.write_all(&Msg::Reply(Ok(())).to_string().as_bytes()).unwrap();
+                    },
+
+                    _ => log::error!("unexpected message: {}", msg_s)
+                }
             }
         }
     }

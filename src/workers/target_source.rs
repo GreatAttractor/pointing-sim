@@ -70,13 +70,20 @@ pub fn target_source() {
         target_pos = P3G::from(Basis3::from_axis_angle(fwd_axis.0, travel_angle).rotate_point(target_pos.0));
         t_last_update = std::time::Instant::now();
 
-        for client in clients.lock().unwrap().iter_mut() {
-            client.write_all(TargetInfoMessage{
+        clients.lock().unwrap().retain_mut(|client| {
+            match client.write_all(TargetInfoMessage{
                 position: to_local_point(&observer_pos, &target_pos),
                 velocity: to_local_vec(&observer_pos, &V3G::from(track_dir.0 * target_speed)),
                 track
-            }.to_string().as_bytes()).unwrap();
-        }
+            }.to_string().as_bytes()) {
+
+                Ok(()) => true,
+                Err(e) => {
+                    log::info!("error sending data ({}), disconnecting from client", e);
+                    false
+                }
+            }
+        });
 
         std::thread::sleep(MSG_DELTA_T);
     }
