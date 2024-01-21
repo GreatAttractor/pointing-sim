@@ -10,7 +10,9 @@ mod camera_view;
 mod draw_buffer;
 
 use crate::{data, runner, workers::MountState};
+use pointing_utils::uom;
 use std::{cell::RefCell, rc::Rc};
+use uom::si::angle;
 
 pub use camera_view::CameraView;
 
@@ -82,7 +84,19 @@ fn handle_camera_view(
 
             camera_view.set_mount_state(mount_state);
 
+            let image_start_pos = ui.cursor_pos();
             imgui::Image::new(camera_view.draw_buf_id(), adjusted.logical_size).build(ui);
+
+            ui.set_cursor_pos(image_start_pos);
+            let _disabled = ui.begin_disabled(true);
+            let _token1 = ui.push_style_color(imgui::StyleColor::Text, [0.0, 0.0, 0.0, 1.0]);
+            let _token2 = ui.push_style_color(imgui::StyleColor::Button, [1.0, 1.0, 1.0, 0.8]);
+            let a1deg = mount_state.axis1_pos.get::<angle::degree>();
+            ui.small_button(&format!(
+                "az. {:.1}°, alt. {:.1}°",
+                if a1deg >= 0.0 && a1deg <= 180.0 { a1deg } else { 360.0 + a1deg },
+                mount_state.axis2_pos.get::<angle::degree>()
+            ));
         });
 }
 
