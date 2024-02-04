@@ -37,7 +37,7 @@ impl CameraView {
         renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>,
         display: &glium::Display
     ) -> CameraView {
-        let field_of_view_y = Deg(20.0); //Deg(2.0);
+        let field_of_view_y = Deg(20.0);
         let target_pos = Point3{ x: 2000.0, y: 0.0, z: 500.0 };
         let dir = target_pos.to_vec();
         let up = Vector3{ x: 0.0, y: 0.0, z: 1.0 };
@@ -85,6 +85,11 @@ impl CameraView {
         );
         self.dir = dir.cast::<f32>().unwrap();
         self.gl_view = Matrix4::look_to_rh(Point3::origin(), self.dir, self.up);
+        self.render();
+    }
+
+    pub fn zoom_by(&mut self, factor: f32) {
+        self.field_of_view_y /= factor;
         self.render();
     }
 

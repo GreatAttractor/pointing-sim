@@ -16,6 +16,9 @@ use uom::si::angle;
 
 pub use camera_view::CameraView;
 
+/// Zoom factor per one step of mouse wheel.
+const MOUSE_WHEEL_ZOOM_FACTOR: f32 = 1.1;
+
 #[derive(Default)]
 pub struct GuiState {
     hidpi_factor: f64,
@@ -86,6 +89,14 @@ fn handle_camera_view(
 
             let image_start_pos = ui.cursor_pos();
             imgui::Image::new(camera_view.draw_buf_id(), adjusted.logical_size).build(ui);
+
+            if ui.is_item_hovered() {
+                let wheel = ui.io().mouse_wheel;
+                if wheel != 0.0 {
+                    let zoom_factor = MOUSE_WHEEL_ZOOM_FACTOR.powf(wheel);
+                    camera_view.zoom_by(zoom_factor);
+                }
+            }
 
             ui.set_cursor_pos(image_start_pos);
             let _disabled = ui.begin_disabled(true);
