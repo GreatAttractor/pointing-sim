@@ -74,7 +74,8 @@ pub fn target_source() {
             match client.write_all(TargetInfoMessage{
                 position: to_local_point(&observer_pos, &target_pos),
                 velocity: to_local_vec(&observer_pos, &V3G::from(track_dir.0 * target_speed)),
-                track
+                track,
+                altitude: target_elevation
             }.to_string().as_bytes()) {
 
                 Ok(()) => true,

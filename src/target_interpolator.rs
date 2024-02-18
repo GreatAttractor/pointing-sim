@@ -39,12 +39,13 @@ impl TargetInterpolator {
             let dt = last_info.0.elapsed();
             let interpolated = Interpolated{
                 position: Point3::<f64, Local>::from(last_info.1.position.0 + last_info.1.velocity.0 * dt.as_secs_f64()),
-                velocity: last_info.1.velocity.clone()
+                velocity: last_info.1.velocity.clone(),
             };
             self.subscribers.notify(&TargetInfoMessage{
                 position: interpolated.position.clone(),
                 velocity: interpolated.velocity.clone(),
-                track: last_info.1.track
+                track: last_info.1.track,
+                altitude: last_info.1.altitude
             });
             self.interpolated = Some(interpolated);
         }
