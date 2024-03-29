@@ -65,26 +65,33 @@ impl ProgramData {
         target_receiver: crossbeam::channel::Receiver<TargetInfoMessage>,
         mount: Arc<Mount>
     ) -> ProgramData {
-        let sky_mesh_prog = Rc::new(program!(display,
+        let create_gl_program = |result| -> glium::Program {
+            match result {
+                Ok(program) => program,
+                Err(e) => { log::error!("failed to compile GL program: {}", e); panic!(); }
+            }
+        };
+
+        let sky_mesh_prog = Rc::new(create_gl_program(program!(display,
             330 => {
                 vertex: include_str!("resources/shaders/3d_view.vert"),
                 fragment: include_str!("resources/shaders/solid_color.frag"),
             }
-        ).unwrap());
+        )));
 
-        let texture_copy_single = Rc::new(program!(display,
+        let texture_copy_single = Rc::new(create_gl_program(program!(display,
             330 => {
                 vertex: include_str!("resources/shaders/pass-through.vert"),
                 fragment: include_str!("resources/shaders/texturing.frag"),
             }
-        ).unwrap());
+        )));
 
-        let texture_copy_multi = Rc::new(program!(display,
+        let texture_copy_multi = Rc::new(create_gl_program(program!(display,
             330 => {
                 vertex: include_str!("resources/shaders/pass-through.vert"),
                 fragment: include_str!("resources/shaders/texturing_multi-sample.frag"),
             }
-        ).unwrap());
+        )));
 
         let unit_quad_data = [
             Vertex2{ position: [-1.0, -1.0] },
@@ -94,12 +101,12 @@ impl ProgramData {
         ];
         let unit_quad = Rc::new(glium::VertexBuffer::new(display, &unit_quad_data).unwrap());
 
-        let target_prog = Rc::new(program!(display,
+        let target_prog = Rc::new(create_gl_program(program!(display,
             330 => {
                 vertex: include_str!("resources/shaders/3d_view.vert"),
                 fragment: include_str!("resources/shaders/surface.frag"),
             }
-        ).unwrap());
+        )));
 
         let gl_objects = OpenGlObjects{
             sky_mesh: create_sky_mesh(Deg(10.0), 10, display),

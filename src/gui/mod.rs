@@ -104,9 +104,10 @@ fn handle_camera_view(
             let _token2 = ui.push_style_color(imgui::StyleColor::Button, [1.0, 1.0, 1.0, 0.8]);
             let a1deg = mount_state.axis1_pos.get::<angle::degree>();
             ui.small_button(&format!(
-                "az. {:.1}°, alt. {:.1}°",
+                "az. {:.1}°, alt. {:.1}°\nFOVy {:.02}°",
                 if a1deg >= 0.0 && a1deg <= 180.0 { a1deg } else { 360.0 + a1deg },
-                mount_state.axis2_pos.get::<angle::degree>()
+                mount_state.axis2_pos.get::<angle::degree>(),
+                camera_view.field_of_view_y().0
             ));
         });
 }

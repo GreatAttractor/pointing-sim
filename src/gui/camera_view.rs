@@ -95,7 +95,7 @@ impl CameraView {
 
     fn render(&self) {
         let mut target = self.draw_buf.frame_buf();
-        target.clear_color_and_depth((0.5, 0.5, 1.0, 1.0), 1.0);
+        target.clear_color_and_depth((0.2, 0.2, 0.7, 1.0), 1.0);
 
         let uniforms = uniform! {
             model: Into::<[[f32; 4]; 4]>::into(Matrix4::<f32>::identity()),
@@ -121,15 +121,16 @@ impl CameraView {
 
         let target_dist = self.target_pos.to_vec().magnitude();
         assert!(target_dist > 500.0);
+        let t_dist_proj = cgmath::dot(self.dir.normalize(), self.target_pos.to_vec());
         let target_model = Matrix4::<f32>::from_translation(self.target_pos.to_vec())
             * Matrix4::from(Matrix3::from(Basis3::from_angle_z(-self.target_heading)));
         let uniforms = uniform! {
             model: Into::<[[f32; 4]; 4]>::into(target_model),
             view: Into::<[[f32; 4]; 4]>::into(self.gl_view),
-            projection: Into::<[[f32; 4]; 4]>::into(self.gl_projection(target_dist - 70.0, target_dist + 70.0)),
-            draw_color: [0.0f32, 1.0f32, 0.0f32, 1.0f32]
+            projection: Into::<[[f32; 4]; 4]>::into(self.gl_projection(t_dist_proj - 70.0, t_dist_proj + 70.0)),
+            draw_color: [1.0f32, 1.0f32, 1.0f32]
         };
-        target.draw(
+        match target.draw(
             &*self.target_mesh.vertices,
             &*self.target_mesh.indices,
             &self.target_prog,
@@ -142,12 +143,17 @@ impl CameraView {
                 },
                 ..Default::default()
             }
-        ).unwrap();
+        ) {
+            Err(e) => { log::error!("failed to render: {}", e); panic!(); },
+            _ => ()
+        }
 
         self.draw_buf.update_storage_buf();
     }
 
     pub fn draw_buf_id(&self) -> imgui::TextureId { self.draw_buf.id() }
+
+    pub fn field_of_view_y(&self) -> Deg<f32> { self.field_of_view_y }
 }
 
 impl Subscriber<TargetInfoMessage> for CameraView {
