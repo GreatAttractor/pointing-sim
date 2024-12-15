@@ -6,9 +6,24 @@
 // (see the LICENSE file for details).
 //
 
-use glium::Surface;
-use std::cell::RefCell;
-use std::rc::Rc;
+use glium::{
+    Surface,
+    glutin::{
+        config::ConfigTemplateBuilder,
+        context::{ContextAttributesBuilder, NotCurrentGlContext},
+        display::{GetGlDisplay, GlDisplay},
+        surface::{SurfaceAttributesBuilder, WindowSurface}
+    }
+};
+use imgui_winit_support::winit::{
+    dpi,
+    event,
+    event::{Event, WindowEvent},
+    event_loop::EventLoop,
+    window::{Window, WindowBuilder}
+};
+use raw_window_handle::HasRawWindowHandle;
+use std::{cell::RefCell, num::NonZeroU32, rc::Rc};
 
 mod clipboard_support;
 
@@ -16,9 +31,10 @@ mod clipboard_support;
 pub struct FontSizeRequest(pub f32);
 
 pub struct Runner {
-    event_loop: glium::glutin::event_loop::EventLoop<()>,
-    display: glium::Display,
+    event_loop: EventLoop<()>,
+    display: glium::Display<WindowSurface>,
     imgui: imgui::Context,
+    pub window: Window,
     platform: imgui_winit_support::WinitPlatform,
     renderer: Rc<RefCell<imgui_glium_renderer::Renderer>>
 }
@@ -45,13 +61,49 @@ fn create_font(physical_font_size: f32) -> imgui::FontSource<'static> {
 }
 
 pub fn create_runner(logical_font_size: f32) -> Runner {
-    let event_loop = glium::glutin::event_loop::EventLoop::new();
-    let context = glium::glutin::ContextBuilder::new().with_vsync(true);
-    let builder = glium::glutin::window::WindowBuilder::new()
+    const INITIAL_WIDTH: u32 = 1024;
+    const INITIAL_HEIGHT: u32 = 768;
+
+    let event_loop = EventLoop::new().expect("Failed to create EventLoop");
+
+    let window_builder = WindowBuilder::new()
         .with_title("Pointing Simulator".to_owned())
-        .with_inner_size(glium::glutin::dpi::LogicalSize::new(1280f64, 768f64));
-    let display =
-        glium::Display::new(builder, context, &event_loop).expect("failed to initialize display");
+        .with_inner_size(dpi::LogicalSize::new(INITIAL_WIDTH as f64, INITIAL_HEIGHT as f64));
+
+    let (window, cfg) = glutin_winit::DisplayBuilder::new()
+        .with_window_builder(Some(window_builder))
+        .build(&event_loop, ConfigTemplateBuilder::new(), |mut configs| {
+            configs.next().unwrap()
+        })
+        .expect("Failed to create OpenGL window");
+    let window = window.unwrap();
+
+    let context_attribs = ContextAttributesBuilder::new().build(Some(window.raw_window_handle()));
+    let context = unsafe {
+        cfg.display()
+            .create_context(&cfg, &context_attribs)
+            .expect("Failed to create OpenGL context")
+    };
+
+    let surface_attribs = SurfaceAttributesBuilder::<WindowSurface>::new().build(
+        window.raw_window_handle(),
+        NonZeroU32::new(INITIAL_WIDTH).unwrap(),
+        NonZeroU32::new(INITIAL_HEIGHT).unwrap(),
+    );
+
+    let surface = unsafe {
+        cfg.display()
+            .create_window_surface(&cfg, &surface_attribs)
+            .expect("Failed to create OpenGL surface")
+    };
+
+    let context = context
+        .make_current(&surface)
+        .expect("Failed to make OpenGL context current");
+
+    let display = glium::Display::from_context_surface(context, surface)
+        .expect("Failed to create glium Display");
+
 
     let mut imgui = imgui::Context::create();
     imgui.set_ini_filename(None);
@@ -63,11 +115,7 @@ pub fn create_runner(logical_font_size: f32) -> Runner {
     }
 
     let mut platform = imgui_winit_support::WinitPlatform::init(&mut imgui);
-    {
-        let gl_window = display.gl_window();
-        let window = gl_window.window();
-        platform.attach_window(imgui.io_mut(), &window, imgui_winit_support::HiDpiMode::Default);
-    }
+    platform.attach_window(imgui.io_mut(), &window, imgui_winit_support::HiDpiMode::Default);
 
     let hidpi_factor = platform.hidpi_factor() as f32;
     let font_size = logical_font_size * hidpi_factor;
@@ -84,6 +132,7 @@ pub fn create_runner(logical_font_size: f32) -> Runner {
         event_loop,
         display,
         imgui,
+        window,
         platform,
         renderer: Rc::new(RefCell::new(renderer))
     }
@@ -94,7 +143,7 @@ impl Runner {
         &self.platform
     }
 
-    pub fn display(&self) -> &glium::Display {
+    pub fn display(&self) -> &glium::Display<WindowSurface> {
         &self.display
     }
 
@@ -102,7 +151,7 @@ impl Runner {
         where F: FnMut(
             &mut bool,
             &mut imgui::Ui,
-            &glium::Display,
+            &glium::Display<WindowSurface>,
             &Rc<RefCell<imgui_glium_renderer::Renderer>>
         ) -> Option<FontSizeRequest> + 'static
     {
@@ -110,6 +159,7 @@ impl Runner {
             event_loop,
             display,
             mut imgui,
+            window,
             mut platform,
             renderer,
             ..
@@ -117,22 +167,24 @@ impl Runner {
 
         let mut last_frame = std::time::Instant::now();
 
-        event_loop.run(move |event, _, control_flow| match event {
-            glium::glutin::event::Event::NewEvents(_) => {
+        event_loop.run(move |event, window_target| match event {
+            Event::NewEvents(_) => {
                 let now = std::time::Instant::now();
                 imgui.io_mut().update_delta_time(now - last_frame);
                 last_frame = now;
             },
 
-            glium::glutin::event::Event::MainEventsCleared => {
-                let gl_window = display.gl_window();
+            Event::AboutToWait => {
                 platform
-                    .prepare_frame(imgui.io_mut(), &gl_window.window())
-                    .expect("failed to prepare frame");
-                gl_window.window().request_redraw();
+                    .prepare_frame(imgui.io_mut(), &window)
+                    .expect("Failed to prepare frame");
+                window.request_redraw();
             },
 
-            glium::glutin::event::Event::RedrawRequested(_) => {
+            Event::WindowEvent {
+                event: WindowEvent::RedrawRequested,
+                ..
+            } => {
                 let font_size_request;
                 {
                     let mut ui = imgui.frame();
@@ -140,13 +192,12 @@ impl Runner {
                     let mut run = true;
                     font_size_request = run_ui(&mut run, &mut ui, &display, &renderer);
                     if !run {
-                        *control_flow = glium::glutin::event_loop::ControlFlow::Exit;
+                        window_target.exit();
                     }
 
-                    let gl_window = display.gl_window();
                     let mut target = display.draw();
                     target.clear_color_srgb(0.5, 0.5, 0.5, 1.0);
-                    platform.prepare_render(&ui, gl_window.window());
+                    platform.prepare_render(&ui, &window);
                     let draw_data = imgui.render();
                     renderer.borrow_mut()
                         .render(&mut target, draw_data)
@@ -160,28 +211,35 @@ impl Runner {
                 }
             },
 
-            glium::glutin::event::Event::WindowEvent {
-                event: glium::glutin::event::WindowEvent::CloseRequested,
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
                 ..
-            } => *control_flow = glium::glutin::event_loop::ControlFlow::Exit,
+            } => window_target.exit(),
+
+            Event::WindowEvent {
+                event: WindowEvent::Resized(new_size),
+                ..
+            } => {
+                if new_size.width > 0 && new_size.height > 0 {
+                    display.resize((new_size.width, new_size.height));
+                }
+                platform.handle_event(imgui.io_mut(), &window, &event);
+            },
 
             event => {
                 let converted_event = convert_touch_to_mouse(event);
 
-                let gl_window = display.gl_window();
-                platform.handle_event(imgui.io_mut(), gl_window.window(), &converted_event);
+                platform.handle_event(imgui.io_mut(), &window, &converted_event);
             }
-        })
+        }).expect("EventLoop error");
     }
 }
 
-fn convert_touch_to_mouse<'a, T>(event: glium::glutin::event::Event<'a, T>) -> glium::glutin::event::Event<'a, T> {
-    use glium::glutin::event;
-
+fn convert_touch_to_mouse<'a, T>(event: Event<T>) -> Event<T> {
     match event {
-        event::Event::WindowEvent {
+        Event::WindowEvent {
             window_id,
-            event: event::WindowEvent::Touch(touch),
+            event: WindowEvent::Touch(touch),
         } => {
             //TODO: do something better here, e.g. remember the last seen mouse device id
             let device_id = touch.device_id.clone();
@@ -193,7 +251,6 @@ fn convert_touch_to_mouse<'a, T>(event: glium::glutin::event::Event<'a, T>) -> g
                         device_id,
                         state: event::ElementState::Pressed,
                         button: event::MouseButton::Left,
-                        modifiers: Default::default()
                     },
                 },
 
@@ -203,7 +260,6 @@ fn convert_touch_to_mouse<'a, T>(event: glium::glutin::event::Event<'a, T>) -> g
                         device_id,
                         state: event::ElementState::Released,
                         button: event::MouseButton::Left,
-                        modifiers: Default::default()
                     },
                 },
 

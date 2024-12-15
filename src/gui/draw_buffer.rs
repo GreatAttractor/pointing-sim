@@ -6,6 +6,7 @@
 // (see the LICENSE file for details).
 //
 
+use glium::glutin::surface::WindowSurface;
 use glium::Surface;
 use glium::texture::{
     depth_texture2d_multisample::DepthTexture2dMultisample,
@@ -49,7 +50,7 @@ pub struct DrawBuffer {
 
     renderer: Rc<RefCell<imgui_glium_renderer::Renderer>>,
 
-    display: glium::Display,
+    display: glium::Display<WindowSurface>,
 
     /// Used for rendering.
     draw_bufs: Buffers,
@@ -142,7 +143,7 @@ impl DrawBuffer {
         texture_copy_single_gl_prog: &Rc<glium::Program>,
         texture_copy_multi_gl_prog: &Rc<glium::Program>,
         unit_quad: &Rc<glium::VertexBuffer<crate::data::Vertex2>>,
-        display: &glium::Display,
+        display: &glium::Display<WindowSurface>,
         renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>
     ) -> DrawBuffer {
         let (id, draw_bufs, storage_buf) = DrawBuffer::create(
@@ -172,7 +173,7 @@ impl DrawBuffer {
         texture_copy_single_gl_prog: &Rc<glium::Program>,
         texture_copy_multi_gl_prog: &Rc<glium::Program>,
         unit_quad: &Rc<glium::VertexBuffer<crate::data::Vertex2>>,
-        display: &glium::Display,
+        display: &glium::Display<WindowSurface>,
         renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>,
         width: u32,
         height: u32
@@ -209,7 +210,7 @@ impl DrawBuffer {
         width: u32,
         height: u32,
         format: glium::texture::UncompressedFloatFormat,
-        display: &glium::Display,
+        display: &glium::Display<WindowSurface>,
         renderer: &mut imgui_glium_renderer::Renderer
     ) -> (imgui::TextureId, Buffers, Rc<Texture2d>) {
         let draw_bufs = match sampling {

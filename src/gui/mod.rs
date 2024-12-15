@@ -10,6 +10,7 @@ mod camera_view;
 mod draw_buffer;
 
 use crate::{data, runner, workers::MountState};
+use glium::glutin::surface::WindowSurface;
 use pointing_utils::uom;
 use std::{cell::RefCell, rc::Rc};
 use uom::si::angle;
@@ -49,7 +50,7 @@ pub fn handle_gui(
     program_data: &mut data::ProgramData,
     ui: &imgui::Ui,
     renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>,
-    display: &glium::Display
+    display: &glium::Display<WindowSurface>
 ) -> Option<runner::FontSizeRequest> {
     unsafe { imgui::sys::igDockSpaceOverViewport(
         imgui::sys::igGetMainViewport(),

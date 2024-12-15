@@ -7,7 +7,7 @@
 //
 
 use clipboard::{ClipboardContext, ClipboardProvider};
-use imgui::{ClipboardBackend};
+use imgui::ClipboardBackend;
 
 pub struct ClipboardSupport(ClipboardContext);
 

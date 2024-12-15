@@ -8,7 +8,7 @@
 
 use cgmath::{Basis3, Deg, EuclideanSpace, InnerSpace, Rad, Rotation, Rotation3};
 use crate::{gui::CameraView, workers::Mount, target_interpolator::TargetInterpolator};
-use glium::program;
+use glium::{glutin::surface::WindowSurface, program};
 use pointing_utils::{TargetInfoMessage, LatLon, to_global_unit};
 use std::{cell::RefCell, error::Error, rc::Rc, sync::Arc};
 
@@ -60,7 +60,7 @@ pub struct ProgramData {
 impl ProgramData {
     pub fn new(
         renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>,
-        display: &glium::Display,
+        display: &glium::Display<WindowSurface>,
         gui_state: crate::gui::GuiState,
         target_receiver: crossbeam::channel::Receiver<TargetInfoMessage>,
         mount: Arc<Mount>
@@ -139,7 +139,7 @@ impl ProgramData {
 }
 
 fn create_target_mesh(
-    display: &glium::Display
+    display: &glium::Display<WindowSurface>
 ) -> MeshBuffers<MeshVertex> {
     use cgmath::Point3 as Point3;
     use cgmath::Vector3 as Vector3;
@@ -214,7 +214,7 @@ fn create_target_mesh(
 fn create_sky_mesh(
     step: cgmath::Deg<f64>,
     num_substeps: usize,
-    display: &glium::Display
+    display: &glium::Display<WindowSurface>
 ) -> MeshBuffers<Vertex3> {
     let mut vertex_data: Vec<Vertex3> = vec![];
     let mut index_data: Vec<u32> = vec![];

@@ -10,15 +10,16 @@ cgmath = "0.18.0"
 chrono = "0.4.12"
 clipboard = "0.5.0"
 crossbeam = "0.8.3"
-glium = { version = "0.32.1", default-features = true }
-imgui = { version = "0.11.0", features = ["docking"] }
-imgui-glium-renderer = { version = "0.11.0", features = [] }
-imgui-winit-support = { version = "0.11.0" }
+glium = { version = "0.34.0", default-features = false, features = ["glutin_backend"] }
+glutin = "0.31.1"
+glutin-winit = "0.4.2"
+imgui = { version = "0.12.0", features = ["docking"] }
+imgui-glium-renderer = { version = "0.12.0", default-features = true }
+imgui-winit-support = { version = "0.12.0" }
 log = "0.4.20"
 pointing-utils = { path = "ext/pointing-utils" }
+raw-window-handle = "0.5.0"
 simplelog = "0.12.1"
 subscriber-rs = { path = "ext/subscriber-rs" }
 time = "0.3.30" # why needed explicitly? simplelog's use not enough?
-# Even though imgui-winit-support 0.11.0 has winit 0.27.2 listed in its dependencies.
-# Why do we have to do this? If not specified, 0.27.5 is picked, which causes an error (x11/wayland not specified).
-winit = "0.27.2"
+winit = { version = "0.29.3", features = ["rwh_05"] }

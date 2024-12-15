@@ -10,7 +10,7 @@ use cgmath::{
     Basis3, Deg, EuclideanSpace, InnerSpace, Matrix3, Matrix4, Point3, Rotation, Rotation3, SquareMatrix, Vector3
 };
 use crate::{data, data::{MeshVertex, Vertex3}, gui::draw_buffer::{DrawBuffer, Sampling}, workers::MountState};
-use glium::{Surface, uniform};
+use glium::{glutin::surface::WindowSurface, Surface, uniform};
 use pointing_utils::{TargetInfoMessage, uom};
 use std::{cell::RefCell, rc::Rc};
 use subscriber_rs::Subscriber;
@@ -35,7 +35,7 @@ impl CameraView {
     pub fn new(
         gl_objects: &data::OpenGlObjects,
         renderer: &Rc<RefCell<imgui_glium_renderer::Renderer>>,
-        display: &glium::Display
+        display: &glium::Display<WindowSurface>
     ) -> CameraView {
         let field_of_view_y = Deg(20.0);
         let target_pos = Point3{ x: 2000.0, y: 0.0, z: 500.0 };
